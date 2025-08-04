@@ -7,6 +7,7 @@
 	import { db } from '$lib/firebase.js';
 	import { collection, query, onSnapshot, doc, getDoc } from 'firebase/firestore';
 	import SnippetCard from '$lib/components/SnippetCard.svelte';
+	import EmbedGenerator from '$lib/components/EmbedGenerator.svelte';
 	import { fade } from 'svelte/transition';
 	
 	const favoriteSnippets = writable([]);
@@ -16,6 +17,8 @@
 	const selectedLanguage = writable('');
 	
 	let showFilters = false;
+	let showEmbedGenerator = false;
+	let embedSnippet = null;
 	let unsubscribe = null;
 	
 	// Filtered snippets based on search and filters
@@ -243,6 +246,7 @@
 					<SnippetCard 
 						{snippet} 
 						on:edit={(e) => console.log('Edit snippet:', e.detail)}
+						on:embed={(e) => { embedSnippet = e.detail; showEmbedGenerator = true; }}
 						on:view={(e) => console.log('View snippet:', e.detail)}
 					/>
 				{/each}
@@ -275,3 +279,10 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- Embed Generator Modal -->
+<EmbedGenerator 
+	isOpen={showEmbedGenerator}
+	snippet={embedSnippet}
+	on:close={() => { showEmbedGenerator = false; embedSnippet = null; }}
+/>

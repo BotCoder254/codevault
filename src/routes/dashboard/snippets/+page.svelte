@@ -17,6 +17,7 @@
 	import ImportExportModal from '$lib/components/ImportExportModal.svelte';
 	import VersionHistory from '$lib/components/VersionHistory.svelte';
 	import ComponentLinker from '$lib/components/ComponentLinker.svelte';
+	import EmbedGenerator from '$lib/components/EmbedGenerator.svelte';
 	import { fade } from 'svelte/transition';
 	
 	let showCreateModal = false;
@@ -24,10 +25,12 @@
 	let showImportExportModal = false;
 	let showVersionHistory = false;
 	let showComponentLinker = false;
+	let showEmbedGenerator = false;
 	let editingSnippet = null;
 	let viewingSnippet = null;
 	let versionSnippet = null;
 	let componentSnippet = null;
+	let embedSnippet = null;
 	let showFilters = false;
 	let importExportTab = 'export';
 	
@@ -56,11 +59,18 @@
 		showComponentLinker = true;
 	};
 	
+	const handleEmbed = (event) => {
+		embedSnippet = event.detail;
+		showEmbedGenerator = true;
+	};
+	
 	const handleModalClose = () => {
 		showCreateModal = false;
 		showViewModal = false;
+		showEmbedGenerator = false;
 		editingSnippet = null;
 		viewingSnippet = null;
+		embedSnippet = null;
 	};
 	
 	const handleVersionClose = () => {
@@ -71,6 +81,11 @@
 	const handleComponentClose = () => {
 		showComponentLinker = false;
 		componentSnippet = null;
+	};
+	
+	const handleEmbedClose = () => {
+		showEmbedGenerator = false;
+		embedSnippet = null;
 	};
 	
 	const handleImportExportClose = () => {
@@ -235,6 +250,7 @@
 						on:view={handleViewSnippet}
 						on:versions={handleVersionHistory}
 						on:components={handleComponentLink}
+						on:embed={handleEmbed}
 					/>
 				{/each}
 			</div>
@@ -349,4 +365,11 @@
 	snippet={componentSnippet}
 	on:close={handleComponentClose}
 	on:updated={handleModalClose}
+/>
+
+<!-- Embed Generator Modal -->
+<EmbedGenerator 
+	isOpen={showEmbedGenerator}
+	snippet={embedSnippet}
+	on:close={handleEmbedClose}
 />

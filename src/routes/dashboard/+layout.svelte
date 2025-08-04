@@ -5,6 +5,7 @@
         Home,
         BookOpen,
         Heart,
+        Bookmark,
         Tag,
         Settings,
         User,
@@ -52,6 +53,12 @@
             label: "Favorites",
             route: "/dashboard/favorites",
             tooltip: "Favorites",
+        },
+        {
+            icon: Bookmark,
+            label: "Bookmarks",
+            route: "/dashboard/bookmarks",
+            tooltip: "Bookmarks",
         },
         {
             icon: User,
@@ -320,6 +327,8 @@
                             Public Snippets
                         {:else if $page.url.pathname === "/dashboard/favorites"}
                             Favorites
+                        {:else if $page.url.pathname === "/dashboard/bookmarks"}
+                            Bookmarks
                         {:else if $page.url.pathname === "/dashboard/profile"}
                             Profile
                         {:else if $page.url.pathname === "/dashboard/tags"}

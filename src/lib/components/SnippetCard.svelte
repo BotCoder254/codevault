@@ -1,9 +1,11 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher } from 'svelte';
-	import { Edit, Trash2, Copy, Eye, Globe, Lock, Users, Tag, Heart, ChevronUp, GitBranch, Link as LinkIcon } from 'lucide-svelte';
+	import { Edit, Trash2, Copy, Eye, Globe, Lock, Users, Tag, Heart, ChevronUp, GitBranch, Link as LinkIcon, Bookmark, Code } from 'lucide-svelte';
 	import { deleteSnippet } from '$lib/stores/snippets.js';
 	import { voteSnippet, favoriteSnippet, getUserVote, isUserFavorite } from '$lib/stores/voting.js';
+	import { toggleBookmark, isBookmarked } from '$lib/stores/bookmarks.js';
+	import { bookmarks } from '$lib/stores/bookmarks.js';
 	import { user } from '$lib/stores/auth.js';
 	import { fade, scale } from 'svelte/transition';
 	
@@ -15,11 +17,14 @@
 	let deleting = false;
 	let voting = false;
 	let favoriting = false;
+	let bookmarking = false;
 	let voteAnimation = '';
 	let favoriteAnimation = '';
+	let bookmarkAnimation = '';
 	
 	$: userVote = $getUserVote(snippet.id);
 	$: isFavorited = $isUserFavorite(snippet.id);
+	$: isSnippetBookmarked = isBookmarked(snippet.id, $bookmarks);
 	$: canInteract = $user && $user.uid !== snippet.userId;
 	
 	const visibilityIcons = {
@@ -69,6 +74,10 @@
 		dispatch('components', snippet);
 	};
 	
+	const handleEmbed = () => {
+		dispatch('embed', snippet);
+	};
+	
 	const handleDelete = async () => {
 		deleting = true;
 		const result = await deleteSnippet(snippet.id);
@@ -114,6 +123,20 @@
 		setTimeout(() => {
 			favoriteAnimation = '';
 			favoriting = false;
+		}, 600);
+	};
+	
+	const handleBookmark = async () => {
+		if (!$user || bookmarking) return;
+		
+		bookmarking = true;
+		bookmarkAnimation = isSnippetBookmarked ? 'bookmarkRemove' : 'bookmarkAdd';
+		
+		await toggleBookmark(snippet.id, $user);
+		
+		setTimeout(() => {
+			bookmarkAnimation = '';
+			bookmarking = false;
 		}, 600);
 	};
 	
@@ -200,6 +223,17 @@
 				
 				<!-- Action buttons -->
 				<div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1">
+					<!-- Bookmark button (always visible when user is logged in) -->
+					{#if $user}
+						<button
+							on:click={handleBookmark}
+							disabled={bookmarking}
+							class="p-1.5 rounded-lg transition-all {isSnippetBookmarked ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {bookmarkAnimation === 'bookmarkAdd' ? 'animate-pulse' : bookmarkAnimation === 'bookmarkRemove' ? 'animate-bounce' : ''}"
+							title={isSnippetBookmarked ? 'Remove bookmark' : 'Bookmark snippet'}
+						>
+							<Bookmark class="w-4 h-4 {isSnippetBookmarked ? 'fill-current' : ''}" />
+						</button>
+					{/if}
 					<button
 						on:click={handleView}
 						class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -214,6 +248,16 @@
 					>
 						<Copy class="w-4 h-4 text-gray-500" />
 					</button>
+					<!-- Embed button for public snippets -->
+					{#if snippet.visibility === 'public'}
+						<button
+							on:click={handleEmbed}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+							title="Generate embed code"
+						>
+							<Code class="w-4 h-4 text-gray-500" />
+						</button>
+					{/if}
 					{#if $user && $user.uid === snippet.userId}
 						<button
 							on:click={handleVersionHistory}

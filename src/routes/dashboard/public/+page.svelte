@@ -6,6 +6,7 @@
 	import { db } from '$lib/firebase.js';
 	import { collection, query, where, orderBy, limit, onSnapshot, startAfter, getDocs } from 'firebase/firestore';
 	import SnippetCard from '$lib/components/SnippetCard.svelte';
+	import EmbedGenerator from '$lib/components/EmbedGenerator.svelte';
 	import { fade, fly, scale } from 'svelte/transition';
 	
 	const publicSnippets = writable([]);
@@ -18,6 +19,8 @@
 	const sortBy = writable('recent'); // 'recent', 'popular', 'votes', 'trending'
 	
 	let showFilters = false;
+	let showEmbedGenerator = false;
+	let embedSnippet = null;
 	let unsubscribe = null;
 	let lastDoc = null;
 	let hasMore = true;
@@ -376,6 +379,7 @@
 						<SnippetCard 
 							{snippet} 
 							on:view={(e) => console.log('View snippet:', e.detail)}
+							on:embed={(e) => { embedSnippet = e.detail; showEmbedGenerator = true; }}
 						/>
 					</div>
 				{/each}
@@ -401,3 +405,10 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- Embed Generator Modal -->
+<EmbedGenerator 
+	isOpen={showEmbedGenerator}
+	snippet={embedSnippet}
+	on:close={() => { showEmbedGenerator = false; embedSnippet = null; }}
+/>
