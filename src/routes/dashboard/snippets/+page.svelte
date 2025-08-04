@@ -251,6 +251,7 @@
 						on:versions={handleVersionHistory}
 						on:components={handleComponentLink}
 						on:embed={handleEmbed}
+						on:fork={(e) => console.log('Forked snippet:', e.detail)}
 					/>
 				{/each}
 			</div>

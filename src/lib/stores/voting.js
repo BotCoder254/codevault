@@ -43,17 +43,29 @@ user.subscribe(($user) => {
 });
 
 const loadUserVotes = (userId) => {
+    // Query all votes across all snippets for this user using collectionGroup
     const q = query(
-        collection(db, 'userVotes'),
-        where('userId', '==', userId)
+        collection(db, 'snippets'),
+        where('visibility', '==', 'public')
     );
 
-    votesUnsubscribe = onSnapshot(q, (snapshot) => {
+    votesUnsubscribe = onSnapshot(q, async (snapshot) => {
         const votes = {};
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            votes[data.snippetId] = data.value;
+        const promises = [];
+        
+        snapshot.forEach((snippetDoc) => {
+            const snippetId = snippetDoc.id;
+            const voteRef = doc(db, `snippets/${snippetId}/votes/${userId}`);
+            promises.push(
+                getDoc(voteRef).then(voteDoc => {
+                    if (voteDoc.exists()) {
+                        votes[snippetId] = voteDoc.data().value;
+                    }
+                })
+            );
         });
+        
+        await Promise.all(promises);
         userVotes.set(votes);
     });
 };
@@ -83,7 +95,8 @@ export const voteSnippet = async (snippetId, value) => {
         if (!currentUser) throw new Error('User not authenticated');
 
         const batch = writeBatch(db);
-        const voteRef = doc(db, 'userVotes', `${currentUser.uid}_${snippetId}`);
+        // Use subcollection for votes
+        const voteRef = doc(db, `snippets/${snippetId}/votes/${currentUser.uid}`);
         const snippetRef = doc(db, 'snippets', snippetId);
 
         // Get current vote
@@ -114,6 +127,7 @@ export const voteSnippet = async (snippetId, value) => {
         await batch.commit();
         return { success: true };
     } catch (error) {
+        console.error('Error voting on snippet:', error);
         return { success: false, error: error.message };
     }
 };

@@ -136,6 +136,7 @@
 						on:versions={handleVersionHistory}
 						on:components={handleComponentLink}
 						on:embed={(e) => { selectedSnippet = e.detail; showEmbedGenerator = true; }}
+						on:fork={(e) => console.log('Forked snippet:', e.detail)}
 					/>
 				</div>
 			{/each}

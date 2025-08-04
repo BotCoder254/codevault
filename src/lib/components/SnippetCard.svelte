@@ -1,11 +1,13 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher } from 'svelte';
-	import { Edit, Trash2, Copy, Eye, Globe, Lock, Users, Tag, Heart, ChevronUp, GitBranch, Link as LinkIcon, Bookmark, Code } from 'lucide-svelte';
+	import { Edit, Trash2, Copy, Eye, Globe, Lock, Users, Tag, Heart, ChevronUp, ChevronDown, GitBranch, Link as LinkIcon, Bookmark, Code, HelpCircle, MessageCircle } from 'lucide-svelte';
 	import { deleteSnippet } from '$lib/stores/snippets.js';
 	import { voteSnippet, favoriteSnippet, getUserVote, isUserFavorite } from '$lib/stores/voting.js';
 	import { toggleBookmark, isBookmarked } from '$lib/stores/bookmarks.js';
 	import { bookmarks } from '$lib/stores/bookmarks.js';
+	import { forkSnippet } from '$lib/stores/fork.js';
+	import { toggleFeedbackRequest, hasFeedbackRequest } from '$lib/stores/feedback.js';
 	import { user } from '$lib/stores/auth.js';
 	import { fade, scale } from 'svelte/transition';
 	
@@ -18,9 +20,15 @@
 	let voting = false;
 	let favoriting = false;
 	let bookmarking = false;
+	let forking = false;
+let requestingFeedback = false;
 	let voteAnimation = '';
 	let favoriteAnimation = '';
 	let bookmarkAnimation = '';
+let voteCountAnimation = '';
+
+// Check if this snippet has a feedback request
+$: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 	
 	$: userVote = $getUserVote(snippet.id);
 	$: isFavorited = $isUserFavorite(snippet.id);
@@ -95,6 +103,7 @@
 		
 		voting = true;
 		voteAnimation = 'bounce';
+		voteCountAnimation = 'animate-count';
 		
 		const result = await voteSnippet(snippet.id, value);
 		
@@ -104,6 +113,7 @@
 		
 		setTimeout(() => {
 			voteAnimation = '';
+			voteCountAnimation = '';
 			voting = false;
 		}, 600);
 	};
@@ -140,6 +150,35 @@
 		}, 600);
 	};
 	
+	const handleFork = async () => {
+		if (!$user || forking) return;
+		
+		forking = true;
+		const result = await forkSnippet(snippet.id, $user);
+		
+		if (result.success) {
+			dispatch('fork', { original: snippet, forked: result });
+		} else {
+			console.error('Failed to fork snippet:', result.error);
+			// You could show a toast notification here
+		}
+		
+		forking = false;
+	};
+	
+	const handleFeedbackRequest = async () => {
+		if (!$user || requestingFeedback) return;
+		
+		requestingFeedback = true;
+		const result = await toggleFeedbackRequest(snippet.id, $user);
+		
+		if (!result.success) {
+			console.error('Failed to toggle feedback request:', result.error);
+		}
+		
+		requestingFeedback = false;
+	};
+	
 	const getLanguageColor = (language) => {
 		const colors = {
 			javascript: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
@@ -163,12 +202,12 @@
 </script>
 
 <div 
-	class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all hover:shadow-lg group"
+	class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all hover:shadow-lg group w-full"
 	transition:fade={{ duration: 200 }}
 >
 	<!-- Header -->
-	<div class="p-4 border-b border-gray-200 dark:border-gray-700">
-		<div class="flex items-start justify-between">
+	<div class="p-4 border-b border-gray-200 dark:border-gray-700 overflow-hidden">
+		<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
 			<div class="flex-1 min-w-0">
 				<h3 class="text-lg font-semibold text-gray-900 dark:text-white truncate">
 					{snippet.title}
@@ -178,51 +217,84 @@
 						{snippet.description}
 					</p>
 				{/if}
-			</div>
-			
-			<div class="flex items-center space-x-2 ml-4">
-				<svelte:component 
-					this={visibilityIcons[snippet.visibility]} 
-					class="w-4 h-4 {visibilityColors[snippet.visibility]}" 
-				/>
 				
-				<!-- Voting and Favorite buttons (always visible for public snippets) -->
-				{#if snippet.visibility === 'public'}
-					<div class="flex items-center space-x-1">
-						<!-- Vote Button -->
-						{#if canInteract}
-							<button
-								on:click={() => handleVote(userVote === 1 ? 0 : 1)}
-								disabled={voting}
-								class="p-1.5 rounded-lg transition-all {userVote === 1 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {voteAnimation === 'bounce' ? 'animate-bounce' : ''}"
-								title="Upvote snippet"
-							>
-								<ChevronUp class="w-4 h-4" />
-							</button>
-						{/if}
-						<span class="text-xs text-gray-500 dark:text-gray-400 min-w-[1rem] text-center">
-							{snippet.voteCount || 0}
-						</span>
-						
-						<!-- Favorite Button -->
-						{#if canInteract}
-							<button
-								on:click={handleFavorite}
-								disabled={favoriting}
-								class="p-1.5 rounded-lg transition-all {isFavorited ? 'text-red-500' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {favoriteAnimation === 'heartbeat' ? 'animate-pulse' : favoriteAnimation === 'heartbreak' ? 'animate-ping' : ''}"
-								title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-							>
-								<Heart class="w-4 h-4 {isFavorited ? 'fill-current' : ''}" />
-							</button>
-						{/if}
-						<span class="text-xs text-gray-500 dark:text-gray-400 min-w-[1rem] text-center">
-							{snippet.favoriteCount || 0}
-						</span>
+				<!-- Fork information -->
+				{#if snippet.forkedFrom}
+					<div class="flex items-center mt-2 text-xs text-gray-500 dark:text-gray-400">
+						<GitBranch class="w-3 h-3 mr-1" />
+						<span>Forked from {snippet.originalAuthor || 'original'}</span>
 					</div>
 				{/if}
 				
-				<!-- Action buttons -->
-				<div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1">
+				<!-- Feedback Request Badge -->
+				{#if hasFeedback}
+					<div class="flex items-center mt-1 text-xs text-purple-600 dark:text-purple-400">
+						<MessageCircle class="w-3 h-3 mr-1" />
+						<span>Feedback requested</span>
+					</div>
+				{/if}
+			</div>
+			
+			<div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
+				<!-- Visibility and Stats -->
+				<div class="flex items-center space-x-2 sm:space-x-3 flex-wrap">
+					<svelte:component 
+						this={visibilityIcons[snippet.visibility]} 
+						class="w-4 h-4 {visibilityColors[snippet.visibility]}" 
+					/>
+					
+					<!-- Voting and Favorite buttons (always visible for public snippets) -->
+					{#if snippet.visibility === 'public'}
+						<div class="flex items-center space-x-2 sm:space-x-3">
+							<!-- Vote Section -->
+							<div class="flex flex-col items-center space-y-1">
+								{#if canInteract}
+									<button
+										on:click={() => handleVote(userVote === 1 ? 0 : 1)}
+										disabled={voting}
+										class="p-1 rounded-lg transition-all {userVote === 1 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {voteAnimation === 'bounce' ? 'animate-bounce' : ''}"
+										title="Upvote snippet"
+									>
+										<ChevronUp class="w-4 h-4" />
+									</button>
+								{/if}
+								<span class="text-xs font-medium text-gray-700 dark:text-gray-300 min-w-[1rem] text-center {voteCountAnimation}">
+									{snippet.voteCount || 0}
+								</span>
+								{#if canInteract}
+									<button
+										on:click={() => handleVote(userVote === -1 ? 0 : -1)}
+										disabled={voting}
+										class="p-1 rounded-lg transition-all {userVote === -1 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {voteAnimation === 'bounce' ? 'animate-bounce' : ''}"
+										title="Downvote snippet"
+									>
+										<ChevronDown class="w-4 h-4" />
+									</button>
+								{/if}
+							</div>
+							
+							<!-- Favorite Section -->
+							<div class="flex items-center space-x-1">
+								{#if canInteract}
+									<button
+										on:click={handleFavorite}
+										disabled={favoriting}
+										class="p-1.5 rounded-lg transition-all {isFavorited ? 'text-red-500' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {favoriteAnimation === 'heartbeat' ? 'animate-heartbeat' : favoriteAnimation === 'heartbreak' ? 'animate-heartbreak' : ''}"
+										title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+									>
+										<Heart class="w-4 h-4 {isFavorited ? 'fill-current' : ''}" />
+									</button>
+								{/if}
+								<span class="text-xs text-gray-500 dark:text-gray-400 min-w-[1rem] text-center">
+									{snippet.favoriteCount || 0}
+								</span>
+							</div>
+						</div>
+					{/if}
+				</div>
+				
+				<!-- Action buttons - Always visible on mobile, hover on desktop -->
+				<div class="flex flex-wrap items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity w-full sm:w-auto justify-end">
 					<!-- Bookmark button (always visible when user is logged in) -->
 					{#if $user}
 						<button
@@ -234,6 +306,22 @@
 							<Bookmark class="w-4 h-4 {isSnippetBookmarked ? 'fill-current' : ''}" />
 						</button>
 					{/if}
+					
+					<!-- Fork button for public snippets (not owned by current user) -->
+					{#if snippet.visibility === 'public' && $user && $user.uid !== snippet.userId}
+						<button
+							on:click={handleFork}
+							disabled={forking}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center justify-center"
+							title="Fork snippet"
+						>
+							<GitBranch class="w-4 h-4 text-gray-500" />
+							{#if forking}
+								<div class="ml-1 w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+							{/if}
+						</button>
+					{/if}
+					
 					<button
 						on:click={handleView}
 						class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -248,6 +336,7 @@
 					>
 						<Copy class="w-4 h-4 text-gray-500" />
 					</button>
+					
 					<!-- Embed button for public snippets -->
 					{#if snippet.visibility === 'public'}
 						<button
@@ -258,6 +347,27 @@
 							<Code class="w-4 h-4 text-gray-500" />
 						</button>
 					{/if}
+					
+					<!-- Request Feedback button for public snippets -->
+					{#if snippet.visibility === 'public' && $user}
+						<button
+							on:click={handleFeedbackRequest}
+							disabled={requestingFeedback}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {hasFeedback ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' : ''}"
+							title={hasFeedback ? "Cancel feedback request" : "Request feedback"}
+						>
+													{#if hasFeedback}
+							<MessageCircle class="w-4 h-4 {hasFeedback ? 'text-purple-600 dark:text-purple-400' : 'text-gray-500'}" />
+						{:else}
+							<HelpCircle class="w-4 h-4 text-gray-500" />
+							{/if}
+							{#if requestingFeedback}
+								<div class="ml-1 w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+							{/if}
+						</button>
+					{/if}
+					
+					<!-- Owner-only buttons -->
 					{#if $user && $user.uid === snippet.userId}
 						<button
 							on:click={handleVersionHistory}
@@ -302,13 +412,13 @@
 	
 	<!-- Footer -->
 	<div class="px-4 pb-4">
-		<div class="flex items-center justify-between">
-			<div class="flex items-center space-x-2">
+		<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
+			<div class="flex flex-wrap items-center gap-2 mb-2 sm:mb-0">
 				<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {getLanguageColor(snippet.language)}">
 					{snippet.language}
 				</span>
 				{#if snippet.tags && snippet.tags.length > 0}
-					<div class="flex items-center space-x-1">
+					<div class="flex flex-wrap items-center gap-1">
 						{#each snippet.tags.slice(0, 3) as tag}
 							<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
 								<Tag class="w-3 h-3 mr-1" />
@@ -322,7 +432,7 @@
 				{/if}
 			</div>
 			
-			<span class="text-xs text-gray-500 dark:text-gray-400">
+			<span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
 				{formatDate(snippet.updatedAt)}
 			</span>
 		</div>
@@ -374,6 +484,7 @@
 	.line-clamp-2 {
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
@@ -381,6 +492,7 @@
 	.line-clamp-4 {
 		display: -webkit-box;
 		-webkit-line-clamp: 4;
+		line-clamp: 4;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
@@ -418,5 +530,24 @@
 	
 	.animate-bounce {
 		animation: bounce 0.6s ease-in-out;
+	}
+	
+	.animate-heartbeat {
+		animation: heartbeat 0.6s ease-in-out;
+	}
+	
+	.animate-heartbreak {
+		animation: heartbreak 0.6s ease-in-out;
+	}
+	
+	@keyframes countChange {
+		0% { transform: scale(1); }
+		50% { transform: scale(1.35); }
+		100% { transform: scale(1); }
+	}
+	
+	.animate-count {
+		animation: countChange 0.6s ease-in-out;
+		color: #3b82f6;
 	}
 </style>

@@ -64,19 +64,7 @@ export const allLanguages = derived(snippets, ($snippets) => {
 
 let unsubscribe = null;
 
-// Subscribe to user changes and load snippets
-user.subscribe(($user) => {
-  if ($user) {
-    loadUserSnippets($user.uid);
-  } else {
-    snippets.set([]);
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
-    }
-  }
-});
-
+// Function to load user snippets
 const loadUserSnippets = (userId) => {
   loading.set(true);
 
@@ -107,6 +95,19 @@ const loadUserSnippets = (userId) => {
     loading.set(false);
   });
 };
+
+// Subscribe to user changes and load snippets
+user.subscribe(($user) => {
+  if ($user) {
+    loadUserSnippets($user.uid);
+  } else {
+    snippets.set([]);
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+  }
+});
 
 export const createSnippet = async (snippetData) => {
   try {

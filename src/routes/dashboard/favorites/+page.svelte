@@ -247,6 +247,7 @@
 						{snippet} 
 						on:edit={(e) => console.log('Edit snippet:', e.detail)}
 						on:embed={(e) => { embedSnippet = e.detail; showEmbedGenerator = true; }}
+						on:fork={(e) => console.log('Forked snippet:', e.detail)}
 						on:view={(e) => console.log('View snippet:', e.detail)}
 					/>
 				{/each}
