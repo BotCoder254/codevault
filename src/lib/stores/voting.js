@@ -1,0 +1,170 @@
+// @ts-nocheck
+import { writable, derived } from 'svelte/store';
+import { user } from './auth.js';
+import { db } from '../firebase.js';
+import {
+    doc,
+    setDoc,
+    deleteDoc,
+    getDoc,
+    collection,
+    query,
+    where,
+    onSnapshot,
+    increment,
+    updateDoc,
+    writeBatch
+} from 'firebase/firestore';
+
+export const userVotes = writable({});
+export const userFavorites = writable({});
+export const snippetVoteCounts = writable({});
+
+let votesUnsubscribe = null;
+let favoritesUnsubscribe = null;
+
+// Subscribe to user changes and load their votes/favorites
+user.subscribe(($user) => {
+    if ($user) {
+        loadUserVotes($user.uid);
+        loadUserFavorites($user.uid);
+    } else {
+        userVotes.set({});
+        userFavorites.set({});
+        if (votesUnsubscribe) {
+            votesUnsubscribe();
+            votesUnsubscribe = null;
+        }
+        if (favoritesUnsubscribe) {
+            favoritesUnsubscribe();
+            favoritesUnsubscribe = null;
+        }
+    }
+});
+
+const loadUserVotes = (userId) => {
+    const q = query(
+        collection(db, 'userVotes'),
+        where('userId', '==', userId)
+    );
+
+    votesUnsubscribe = onSnapshot(q, (snapshot) => {
+        const votes = {};
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            votes[data.snippetId] = data.value;
+        });
+        userVotes.set(votes);
+    });
+};
+
+const loadUserFavorites = (userId) => {
+    const favoritesRef = collection(db, 'users', userId, 'favorites');
+
+    favoritesUnsubscribe = onSnapshot(favoritesRef, (snapshot) => {
+        const favorites = {};
+        snapshot.forEach((doc) => {
+            favorites[doc.id] = true;
+        });
+        userFavorites.set(favorites);
+    });
+};
+
+export const voteSnippet = async (snippetId, value) => {
+    try {
+        const currentUser = await new Promise((resolve) => {
+            let userUnsubscribe;
+            userUnsubscribe = user.subscribe((u) => {
+                if (userUnsubscribe) userUnsubscribe();
+                resolve(u);
+            });
+        });
+
+        if (!currentUser) throw new Error('User not authenticated');
+
+        const batch = writeBatch(db);
+        const voteRef = doc(db, 'userVotes', `${currentUser.uid}_${snippetId}`);
+        const snippetRef = doc(db, 'snippets', snippetId);
+
+        // Get current vote
+        const currentVoteDoc = await getDoc(voteRef);
+        const currentVote = currentVoteDoc.exists() ? currentVoteDoc.data().value : 0;
+
+        if (value === currentVote) {
+            // Remove vote
+            batch.delete(voteRef);
+            batch.update(snippetRef, {
+                voteCount: increment(-currentVote)
+            });
+        } else {
+            // Add or update vote
+            batch.set(voteRef, {
+                userId: currentUser.uid,
+                snippetId,
+                value,
+                createdAt: new Date()
+            });
+
+            const increment_value = value - currentVote;
+            batch.update(snippetRef, {
+                voteCount: increment(increment_value)
+            });
+        }
+
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+};
+
+export const favoriteSnippet = async (snippetId, isFavorite) => {
+    try {
+        const currentUser = await new Promise((resolve) => {
+            let userUnsubscribe;
+            userUnsubscribe = user.subscribe((u) => {
+                if (userUnsubscribe) userUnsubscribe();
+                resolve(u);
+            });
+        });
+
+        if (!currentUser) throw new Error('User not authenticated');
+
+        const favoriteRef = doc(db, 'users', currentUser.uid, 'favorites', snippetId);
+        const snippetRef = doc(db, 'snippets', snippetId);
+
+        const batch = writeBatch(db);
+
+        if (isFavorite) {
+            batch.set(favoriteRef, {
+                snippetId,
+                createdAt: new Date()
+            });
+            batch.update(snippetRef, {
+                favoriteCount: increment(1)
+            });
+        } else {
+            batch.delete(favoriteRef);
+            batch.update(snippetRef, {
+                favoriteCount: increment(-1)
+            });
+        }
+
+        await batch.commit();
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+};
+
+// Helper to check if user has voted on a snippet
+export const getUserVote = derived(
+    [userVotes],
+    ([$userVotes]) => (snippetId) => $userVotes[snippetId] || 0
+);
+
+// Helper to check if user has favorited a snippet
+export const isUserFavorite = derived(
+    [userFavorites],
+    ([$userFavorites]) => (snippetId) => !!$userFavorites[snippetId]
+);
