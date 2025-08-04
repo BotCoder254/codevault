@@ -75,7 +75,7 @@ export async function toggleFeedbackRequest(snippetId, currentUser, requestType 
 }
 
 // Function to add a comment to a feedback request
-export async function addFeedbackComment(snippetId, requestId, comment, currentUser) {
+export async function addFeedbackComment(snippetId, requestId, comment, currentUser, parentCommentId = null) {
     if (!currentUser) {
         return { success: false, error: 'User not authenticated' };
     }
@@ -86,17 +86,83 @@ export async function addFeedbackComment(snippetId, requestId, comment, currentU
             userName: currentUser.displayName || currentUser.email,
             userEmail: currentUser.email,
             text: comment,
-            createdAt: serverTimestamp()
+            createdAt: serverTimestamp(),
+            parentCommentId: parentCommentId, // For threaded comments
+            edited: false
         };
         
-        await addDoc(
+        const docRef = await addDoc(
             collection(db, `snippets/${snippetId}/feedbackRequests/${requestId}/comments`),
             commentData
         );
         
-        return { success: true };
+        return { success: true, commentId: docRef.id };
     } catch (error) {
         console.error('Error adding feedback comment:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Function to edit a comment
+export async function editFeedbackComment(snippetId, requestId, commentId, newText, currentUser) {
+    if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+    }
+    
+    try {
+        const commentRef = doc(db, `snippets/${snippetId}/feedbackRequests/${requestId}/comments/${commentId}`);
+        const commentDoc = await getDoc(commentRef);
+        
+        if (!commentDoc.exists()) {
+            return { success: false, error: 'Comment not found' };
+        }
+        
+        const commentData = commentDoc.data();
+        
+        // Only the comment author can edit it
+        if (commentData.userId !== currentUser.uid) {
+            return { success: false, error: 'Not authorized to edit this comment' };
+        }
+        
+        await updateDoc(commentRef, {
+            text: newText,
+            edited: true,
+            updatedAt: serverTimestamp()
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error editing feedback comment:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Function to delete a comment
+export async function deleteFeedbackComment(snippetId, requestId, commentId, currentUser) {
+    if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+    }
+    
+    try {
+        const commentRef = doc(db, `snippets/${snippetId}/feedbackRequests/${requestId}/comments/${commentId}`);
+        const commentDoc = await getDoc(commentRef);
+        
+        if (!commentDoc.exists()) {
+            return { success: false, error: 'Comment not found' };
+        }
+        
+        const commentData = commentDoc.data();
+        
+        // Only the comment author can delete it
+        if (commentData.userId !== currentUser.uid) {
+            return { success: false, error: 'Not authorized to delete this comment' };
+        }
+        
+        await deleteDoc(commentRef);
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting feedback comment:', error);
         return { success: false, error: error.message };
     }
 }

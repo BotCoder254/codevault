@@ -1,7 +1,10 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher } from 'svelte';
-	import { X, Save, Tag, Globe, Lock, Users } from 'lucide-svelte';
+	import { X, Save, Tag, Globe, Lock, Users, FileText, Key } from 'lucide-svelte';
+	import { availableLicenses } from '$lib/stores/licenses.js';
+	import { backgroundImage } from '$lib/stores/background.js';
+	import PasswordProtectionModal from './PasswordProtectionModal.svelte';
 	import MonacoEditor from './MonacoEditor.svelte';
 	import TagInput from './TagInput.svelte';
 	import { createSnippet, updateSnippet } from '$lib/stores/snippets.js';
@@ -20,6 +23,8 @@
 	let language = 'javascript';
 	let tags = [];
 	let visibility = 'private';
+	let licenseId = '';
+	let showPasswordModal = false;
 	let loading = false;
 	let error = '';
 	
@@ -43,6 +48,7 @@
 		language = snippet.language || 'javascript';
 		tags = snippet.tags || [];
 		visibility = snippet.visibility || 'private';
+		licenseId = snippet.licenseId || '';
 	} else {
 		// Reset form for new snippet
 		title = '';
@@ -51,6 +57,7 @@
 		language = 'javascript';
 		tags = [];
 		visibility = 'private';
+		licenseId = '';
 	}
 	
 	const handleTagsChanged = (event) => {
@@ -68,7 +75,8 @@
 			code,
 			language,
 			tags,
-			visibility
+			visibility,
+			licenseId
 		};
 		
 		let result;
@@ -113,12 +121,13 @@
 
 {#if isOpen}
 	<div 
-		class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+		class="fixed inset-0 flex items-center justify-center p-4 z-50"
 		on:click={handleBackdropClick}
 		transition:fade={{ duration: 200 }}
+		style="background-image: url('{$backgroundImage.url}'); background-size: cover; background-position: center; backdrop-filter: blur({$backgroundImage.blur});"
 	>
 		<div 
-			class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+			class="bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
 			transition:scale={{ duration: 200, start: 0.95 }}
 		>
 			<!-- Header -->
@@ -198,30 +207,76 @@
 					</div>
 					
 					<!-- Visibility -->
-					<div>
-						<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-							Visibility
-						</label>
-						<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-							{#each visibilityOptions as option}
-								<label class="relative">
-									<input
-										type="radio"
-										bind:group={visibility}
-										value={option.value}
-										class="sr-only"
-									/>
-									<div class="p-3 border-2 rounded-lg cursor-pointer transition-all {visibility === option.value ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'}">
-										<div class="flex items-center space-x-2">
-											<svelte:component this={option.icon} class="w-4 h-4 text-gray-600 dark:text-gray-400" />
-											<span class="font-medium text-gray-900 dark:text-white">{option.label}</span>
+						<div>
+							<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+								Visibility
+							</label>
+							<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+								{#each visibilityOptions as option}
+									<label class="relative">
+										<input
+											type="radio"
+											bind:group={visibility}
+											value={option.value}
+											class="sr-only"
+										/>
+										<div class="p-3 border-2 rounded-lg cursor-pointer transition-all {visibility === option.value ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'}">
+											<div class="flex items-center space-x-2">
+												<svelte:component this={option.icon} class="w-4 h-4 text-gray-600 dark:text-gray-400" />
+												<span class="font-medium text-gray-900 dark:text-white">{option.label}</span>
+											</div>
+											<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{option.description}</p>
 										</div>
-										<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{option.description}</p>
-									</div>
-								</label>
-							{/each}
+									</label>
+								{/each}
+							</div>
 						</div>
-					</div>
+						
+						<!-- License -->
+						{#if visibility === 'public'}
+							<div>
+								<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+									License
+								</label>
+								<select
+									bind:value={licenseId}
+									class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+								>
+									<option value="">No License (All Rights Reserved)</option>
+									{#each availableLicenses as license}
+										<option value={license.id}>{license.name} ({license.shortName})</option>
+									{/each}
+								</select>
+								<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+									Choosing a license helps others understand how they can use your code.
+								</p>
+							</div>
+						{/if}
+						
+						<!-- Password Protection (for private snippets) -->
+						{#if visibility === 'private' && snippet}
+							<div>
+								<div class="flex items-center justify-between mb-2">
+									<label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+										Password Protection
+									</label>
+									<span class="text-xs text-gray-500 dark:text-gray-400">
+										{snippet.isPasswordProtected ? 'Enabled' : 'Disabled'}
+									</span>
+								</div>
+								<button
+									type="button"
+									on:click={() => showPasswordModal = true}
+									class="w-full flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-700 transition-colors text-gray-300"
+								>
+									<Key class="w-4 h-4 mr-2" />
+									{snippet.isPasswordProtected ? 'Manage Password Protection' : 'Add Password Protection'}
+								</button>
+								<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+									Add a password to share your private snippet securely with specific people.
+								</p>
+							</div>
+						{/if}
 					
 					<!-- Code Editor -->
 					<div>
@@ -257,4 +312,12 @@
 			</div>
 		</div>
 	</div>
+
+{#if showPasswordModal && snippet}
+	<PasswordProtectionModal
+		{snippet}
+		isOpen={showPasswordModal}
+		on:close={() => showPasswordModal = false}
+	/>
+{/if}
 {/if}

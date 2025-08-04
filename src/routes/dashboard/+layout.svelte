@@ -15,6 +15,8 @@
         LogOut,
         Moon,
         Sun,
+        MessageCircle,
+        Share2,
     } from "lucide-svelte";
     import {
         sidebarCollapsed,
@@ -47,6 +49,18 @@
             label: "Public Snippets",
             route: "/dashboard/public",
             tooltip: "Public Snippets",
+        },
+        {
+            icon: Share2,
+            label: "Community",
+            route: "/dashboard/community",
+            tooltip: "Community Snippets",
+        },
+        {
+            icon: MessageCircle,
+            label: "Feedback",
+            route: "/dashboard/feedback",
+            tooltip: "Community Feedback",
         },
         {
             icon: Heart,
@@ -325,6 +339,8 @@
                             My Snippets
                         {:else if $page.url.pathname === "/dashboard/public"}
                             Public Snippets
+                        {:else if $page.url.pathname === "/dashboard/feedback"}
+                            Community Feedback
                         {:else if $page.url.pathname === "/dashboard/favorites"}
                             Favorites
                         {:else if $page.url.pathname === "/dashboard/bookmarks"}

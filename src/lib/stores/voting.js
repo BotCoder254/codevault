@@ -23,25 +23,7 @@ export const snippetVoteCounts = writable({});
 let votesUnsubscribe = null;
 let favoritesUnsubscribe = null;
 
-// Subscribe to user changes and load their votes/favorites
-user.subscribe(($user) => {
-    if ($user) {
-        loadUserVotes($user.uid);
-        loadUserFavorites($user.uid);
-    } else {
-        userVotes.set({});
-        userFavorites.set({});
-        if (votesUnsubscribe) {
-            votesUnsubscribe();
-            votesUnsubscribe = null;
-        }
-        if (favoritesUnsubscribe) {
-            favoritesUnsubscribe();
-            favoritesUnsubscribe = null;
-        }
-    }
-});
-
+// Define the functions before using them
 const loadUserVotes = (userId) => {
     // Query all votes across all snippets for this user using collectionGroup
     const q = query(
@@ -81,6 +63,25 @@ const loadUserFavorites = (userId) => {
         userFavorites.set(favorites);
     });
 };
+
+// Subscribe to user changes and load their votes/favorites
+user.subscribe(($user) => {
+    if ($user) {
+        loadUserVotes($user.uid);
+        loadUserFavorites($user.uid);
+    } else {
+        userVotes.set({});
+        userFavorites.set({});
+        if (votesUnsubscribe) {
+            votesUnsubscribe();
+            votesUnsubscribe = null;
+        }
+        if (favoritesUnsubscribe) {
+            favoritesUnsubscribe();
+            favoritesUnsubscribe = null;
+        }
+    }
+});
 
 export const voteSnippet = async (snippetId, value) => {
     try {

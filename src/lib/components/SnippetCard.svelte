@@ -1,15 +1,22 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher } from 'svelte';
-	import { Edit, Trash2, Copy, Eye, Globe, Lock, Users, Tag, Heart, ChevronUp, ChevronDown, GitBranch, Link as LinkIcon, Bookmark, Code, HelpCircle, MessageCircle } from 'lucide-svelte';
+	import { Edit, Trash2, Copy, Eye, Globe, Lock, Users, Tag, Heart, ChevronUp, ChevronDown, GitBranch, Link as LinkIcon, Bookmark, Code, HelpCircle, MessageCircle, CheckSquare, FileText, Share2, Key } from 'lucide-svelte';
 	import { deleteSnippet } from '$lib/stores/snippets.js';
 	import { voteSnippet, favoriteSnippet, getUserVote, isUserFavorite } from '$lib/stores/voting.js';
 	import { toggleBookmark, isBookmarked } from '$lib/stores/bookmarks.js';
 	import { bookmarks } from '$lib/stores/bookmarks.js';
 	import { forkSnippet } from '$lib/stores/fork.js';
 	import { toggleFeedbackRequest, hasFeedbackRequest } from '$lib/stores/feedback.js';
+	import { getSnippetTodos } from '$lib/stores/todos.js';
+	import { getLicenseById } from '$lib/stores/licenses.js';
+	import { addToCommunity, removeFromCommunity, isInCommunity } from '$lib/stores/community.js';
+	import { generateShareLink } from '$lib/stores/password.js';
 	import { user } from '$lib/stores/auth.js';
 	import { fade, scale } from 'svelte/transition';
+	import SnippetTodos from './SnippetTodos.svelte';
+	import LicenseSelector from './LicenseSelector.svelte';
+	import ViewFeedbackRequests from './ViewFeedbackRequests.svelte';
 	
 	export let snippet;
 	
@@ -22,13 +29,29 @@
 	let bookmarking = false;
 	let forking = false;
 let requestingFeedback = false;
+	let showTodosModal = false;
+	let showLicenseModal = false;
+	let showFeedbackModal = false;
 	let voteAnimation = '';
 	let favoriteAnimation = '';
 	let bookmarkAnimation = '';
-let voteCountAnimation = '';
+	let voteCountAnimation = '';
+	let addingToCommunity = false;
+	let removingFromCommunity = false;
+	let copyingShareLink = false;
 
 // Check if this snippet has a feedback request
 $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
+
+// Get todos for this snippet
+$: todos = $getSnippetTodos ? $getSnippetTodos(snippet.id) : [];
+$: pendingTodos = todos.filter(todo => todo.status === 'pending');
+
+// Get license info
+$: license = snippet.licenseId ? getLicenseById(snippet.licenseId) : null;
+
+// Check if snippet is in community
+$: inCommunity = $isInCommunity ? $isInCommunity(snippet.id) : false;
 	
 	$: userVote = $getUserVote(snippet.id);
 	$: isFavorited = $isUserFavorite(snippet.id);
@@ -57,12 +80,18 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 		});
 	};
 	
+	let copying = false;
 	const copyToClipboard = async () => {
 		try {
+			copying = true;
 			await navigator.clipboard.writeText(snippet.code);
-			// You could add a toast notification here
+			// Add visual feedback
+			setTimeout(() => {
+				copying = false;
+			}, 1000);
 		} catch (err) {
 			console.error('Failed to copy:', err);
+			copying = false;
 		}
 	};
 	
@@ -179,6 +208,69 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 		requestingFeedback = false;
 	};
 	
+	const handleViewFeedback = () => {
+		showFeedbackModal = true;
+	};
+	
+	const handleCloseFeedback = () => {
+		showFeedbackModal = false;
+	};
+	
+	const handleShowTodos = () => {
+		showTodosModal = true;
+	};
+	
+	const handleCloseTodos = () => {
+		showTodosModal = false;
+	};
+	
+	const handleShowLicense = () => {
+		showLicenseModal = true;
+	};
+	
+	const handleCloseLicense = () => {
+		showLicenseModal = false;
+	};
+	
+	const handleToggleCommunity = async () => {
+		if (!$user) return;
+		
+		if (inCommunity) {
+			removingFromCommunity = true;
+			const result = await removeFromCommunity(snippet.id, $user);
+			
+			if (!result.success) {
+				console.error('Failed to remove from community:', result.error);
+			}
+			
+			removingFromCommunity = false;
+		} else {
+			addingToCommunity = true;
+			const result = await addToCommunity(snippet.id, $user);
+			
+			if (!result.success) {
+				console.error('Failed to add to community:', result.error);
+			}
+			
+			addingToCommunity = false;
+		}
+	};
+	
+	const handleCopyShareLink = async () => {
+		if (!snippet) return;
+		
+		try {
+			const shareLink = generateShareLink(snippet.id);
+			await navigator.clipboard.writeText(shareLink);
+			copyingShareLink = true;
+			setTimeout(() => {
+				copyingShareLink = false;
+			}, 2000);
+		} catch (error) {
+			console.error('Failed to copy share link:', error);
+		}
+	};
+	
 	const getLanguageColor = (language) => {
 		const colors = {
 			javascript: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
@@ -202,8 +294,12 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 </script>
 
 <div 
-	class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all hover:shadow-lg group w-full"
+	class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-all hover:shadow-lg group w-full cursor-pointer"
 	transition:fade={{ duration: 200 }}
+	on:click={handleView}
+	on:keydown={(e) => e.key === 'Enter' && handleView()}
+	role="button"
+	tabindex="0"
 >
 	<!-- Header -->
 	<div class="p-4 border-b border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -250,7 +346,7 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 							<div class="flex flex-col items-center space-y-1">
 								{#if canInteract}
 									<button
-										on:click={() => handleVote(userVote === 1 ? 0 : 1)}
+										on:click|stopPropagation={() => handleVote(userVote === 1 ? 0 : 1)}
 										disabled={voting}
 										class="p-1 rounded-lg transition-all {userVote === 1 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {voteAnimation === 'bounce' ? 'animate-bounce' : ''}"
 										title="Upvote snippet"
@@ -263,7 +359,7 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 								</span>
 								{#if canInteract}
 									<button
-										on:click={() => handleVote(userVote === -1 ? 0 : -1)}
+										on:click|stopPropagation={() => handleVote(userVote === -1 ? 0 : -1)}
 										disabled={voting}
 										class="p-1 rounded-lg transition-all {userVote === -1 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {voteAnimation === 'bounce' ? 'animate-bounce' : ''}"
 										title="Downvote snippet"
@@ -277,7 +373,7 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 							<div class="flex items-center space-x-1">
 								{#if canInteract}
 									<button
-										on:click={handleFavorite}
+										on:click|stopPropagation={handleFavorite}
 										disabled={favoriting}
 										class="p-1.5 rounded-lg transition-all {isFavorited ? 'text-red-500' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {favoriteAnimation === 'heartbeat' ? 'animate-heartbeat' : favoriteAnimation === 'heartbreak' ? 'animate-heartbreak' : ''}"
 										title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
@@ -298,7 +394,7 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 					<!-- Bookmark button (always visible when user is logged in) -->
 					{#if $user}
 						<button
-							on:click={handleBookmark}
+							on:click|stopPropagation={handleBookmark}
 							disabled={bookmarking}
 							class="p-1.5 rounded-lg transition-all {isSnippetBookmarked ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'} {bookmarkAnimation === 'bookmarkAdd' ? 'animate-pulse' : bookmarkAnimation === 'bookmarkRemove' ? 'animate-bounce' : ''}"
 							title={isSnippetBookmarked ? 'Remove bookmark' : 'Bookmark snippet'}
@@ -310,7 +406,7 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 					<!-- Fork button for public snippets (not owned by current user) -->
 					{#if snippet.visibility === 'public' && $user && $user.uid !== snippet.userId}
 						<button
-							on:click={handleFork}
+							on:click|stopPropagation={handleFork}
 							disabled={forking}
 							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center justify-center"
 							title="Fork snippet"
@@ -323,24 +419,25 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 					{/if}
 					
 					<button
-						on:click={handleView}
-						class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-						title="View snippet"
-					>
+							on:click|stopPropagation={handleView}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+							title="View snippet"
+						>
 						<Eye class="w-4 h-4 text-gray-500" />
 					</button>
 					<button
-						on:click={copyToClipboard}
-						class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+						on:click|stopPropagation={copyToClipboard}
+						class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {copying ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : ''}"
 						title="Copy code"
+						disabled={copying}
 					>
-						<Copy class="w-4 h-4 text-gray-500" />
+						<Copy class="w-4 h-4 {copying ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}" />
 					</button>
 					
 					<!-- Embed button for public snippets -->
 					{#if snippet.visibility === 'public'}
 						<button
-							on:click={handleEmbed}
+							on:click|stopPropagation={handleEmbed}
 							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
 							title="Generate embed code"
 						>
@@ -351,7 +448,7 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 					<!-- Request Feedback button for public snippets -->
 					{#if snippet.visibility === 'public' && $user}
 						<button
-							on:click={handleFeedbackRequest}
+							on:click|stopPropagation={handleFeedbackRequest}
 							disabled={requestingFeedback}
 							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {hasFeedback ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' : ''}"
 							title={hasFeedback ? "Cancel feedback request" : "Request feedback"}
@@ -367,31 +464,88 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 						</button>
 					{/if}
 					
+					<!-- Tasks button -->
+					<button
+						on:click|stopPropagation={handleShowTodos}
+						class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {pendingTodos.length > 0 ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : ''}"
+						title="Manage tasks"
+					>
+						<CheckSquare class="w-4 h-4 {pendingTodos.length > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500'}" />
+					</button>
+					
+					<!-- License button (owner only) -->
+					{#if $user && $user.uid === snippet.userId}
+						<button
+							on:click|stopPropagation={handleShowLicense}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {license ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : ''}"
+							title="Set license"
+						>
+							<FileText class="w-4 h-4 {license ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}" />
+						</button>
+					{/if}
+					
+					<!-- View feedback button -->
+					{#if hasFeedback}
+						<button
+							on:click|stopPropagation={handleViewFeedback}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
+							title="View feedback"
+						>
+							<MessageCircle class="w-4 h-4 text-purple-600 dark:text-purple-400" />
+						</button>
+					{/if}
+					
+					<!-- Share Link button (for password protected snippets) -->
+					{#if snippet.isPasswordProtected}
+						<button
+							on:click|stopPropagation={handleCopyShareLink}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {copyingShareLink ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : ''}"
+							title="Copy share link"
+						>
+							<LinkIcon class="w-4 h-4 {copyingShareLink ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}" />
+						</button>
+					{/if}
+					
+					<!-- Community button for public snippets -->
+					{#if snippet.visibility === 'public' && $user}
+						<button
+							on:click|stopPropagation={handleToggleCommunity}
+							disabled={addingToCommunity || removingFromCommunity}
+							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors {inCommunity ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : ''}"
+							title={inCommunity ? "Remove from community" : "Add to community"}
+						>
+							<Share2 class="w-4 h-4 {inCommunity ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}" />
+							{#if addingToCommunity || removingFromCommunity}
+								<div class="ml-1 w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+							{/if}
+						</button>
+					{/if}
+					
 					<!-- Owner-only buttons -->
 					{#if $user && $user.uid === snippet.userId}
 						<button
-							on:click={handleVersionHistory}
+							on:click|stopPropagation={handleVersionHistory}
 							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
 							title="Version history"
 						>
 							<GitBranch class="w-4 h-4 text-gray-500" />
 						</button>
 						<button
-							on:click={handleComponentLink}
+							on:click|stopPropagation={handleComponentLink}
 							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
 							title="Link components"
 						>
 							<LinkIcon class="w-4 h-4 text-gray-500" />
 						</button>
 						<button
-							on:click={handleEdit}
+							on:click|stopPropagation={handleEdit}
 							class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
 							title="Edit snippet"
 						>
 							<Edit class="w-4 h-4 text-gray-500" />
 						</button>
 						<button
-							on:click={() => showDeleteConfirm = true}
+							on:click|stopPropagation={() => showDeleteConfirm = true}
 							class="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
 							title="Delete snippet"
 						>
@@ -417,6 +571,47 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 				<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium {getLanguageColor(snippet.language)}">
 					{snippet.language}
 				</span>
+				
+				<!-- License Badge -->
+				{#if license}
+					<button 
+						on:click|stopPropagation={handleShowLicense}
+						class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium cursor-pointer {license.color}"
+						title="View license details"
+					>
+						<FileText class="w-3 h-3 mr-1" />
+						{license.shortName}
+					</button>
+				{/if}
+				
+				<!-- Community Badge -->
+				{#if inCommunity}
+					<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+						<Share2 class="w-3 h-3 mr-1" />
+						Community
+					</span>
+				{/if}
+				
+				<!-- Password Protection Badge -->
+				{#if snippet.isPasswordProtected}
+					<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">
+						<Key class="w-3 h-3 mr-1" />
+						Password Protected
+					</span>
+				{/if}
+				
+				<!-- Todo Count Badge -->
+				{#if pendingTodos.length > 0}
+					<button 
+						on:click|stopPropagation={handleShowTodos}
+						class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium cursor-pointer bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
+						title="View tasks"
+					>
+						<CheckSquare class="w-3 h-3 mr-1" />
+						{pendingTodos.length} {pendingTodos.length === 1 ? 'task' : 'tasks'}
+					</button>
+				{/if}
+				
 				{#if snippet.tags && snippet.tags.length > 0}
 					<div class="flex flex-wrap items-center gap-1">
 						{#each snippet.tags.slice(0, 3) as tag}
@@ -478,6 +673,29 @@ $: hasFeedback = $hasFeedbackRequest ? $hasFeedbackRequest(snippet.id) : false;
 			</div>
 		</div>
 	</div>
+{/if}
+
+<!-- Todo Modal -->
+{#if showTodosModal}
+	<SnippetTodos
+		{snippet}
+		on:close={handleCloseTodos}
+	/>
+{/if}
+
+<!-- License Modal -->
+{#if showLicenseModal}
+	<LicenseSelector
+		{snippet}
+		on:close={handleCloseLicense}
+	/>
+{/if}
+
+<!-- Feedback Modal -->
+{#if showFeedbackModal}
+	<ViewFeedbackRequests
+		{snippet}
+	/>
 {/if}
 
 <style>
